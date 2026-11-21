@@ -1,13 +1,13 @@
-using static GoodNotesClone.ColorUtils;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using GoodNotesClone.Models;
+using GoodNotesClone.Services;
 
 namespace GoodNotesClone.ViewModels
 {
@@ -16,21 +16,48 @@ namespace GoodNotesClone.ViewModels
         private Notebook _currentNotebook;
         private Page _currentPage;
         private DrawingTool _currentTool;
+        private int _currentPageIndex;
         private double _zoomLevel = 1.0;
-        private bool _isDrawing;
-        private Point _lastPoint;
-        private Stroke _currentStroke;
-        public Stroke CurrentStroke => _currentStroke;
         private List<Stroke> _selectedStrokes = new List<Stroke>();
-        private UndoManager _undoManager;
+        private string _currentNotebookName;
+        private string _searchQuery;
         
         public ObservableCollection<Notebook> Notebooks { get; } = new ObservableCollection<Notebook>();
-        public ObservableCollection<Page> Pages { get; } = new ObservableCollection<Page>();
+        public UndoManager UndoManager { get; } = new UndoManager();
+        
+        public event EventHandler CurrentNotebookChanged;
+        public event EventHandler CurrentPageChanged;
+        public event EventHandler StrokesChanged;
+        public event EventHandler ZoomChanged;
+        
+        public MainViewModel()
+        {
+            // Initialize with a default notebook
+            NewNotebookCommand.Execute(null);
+            
+            // Set default tool
+            CurrentTool = new DrawingTool(ToolType.Pen);
+        }
+        
+        #region Properties
         
         public Notebook CurrentNotebook
         {
             get => _currentNotebook;
-            set => SetField(ref _currentNotebook, value, nameof(CurrentNotebook));
+            set
+            {
+                if (_currentNotebook != value)
+                {
+                    _currentNotebook = value;
+                    OnPropertyChanged();
+                    CurrentNotebookChanged?.Invoke(this, EventArgs.Empty);
+                    
+                    if (value != null)
+                    {
+                        CurrentPageIndex = 0;
+                    }
+                }
+            }
         }
         
         public Page CurrentPage
@@ -38,10 +65,27 @@ namespace GoodNotesClone.ViewModels
             get => _currentPage;
             set
             {
-                if (SetField(ref _currentPage, value, nameof(CurrentPage)))
+                if (_currentPage != value)
                 {
-                    OnPropertyChanged(nameof(PageName));
-                    OnPropertyChanged(nameof(PageCount));
+                    _currentPage = value;
+                    OnPropertyChanged();
+                    CurrentPageChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
+        }
+        
+        public int CurrentPageIndex
+        {
+            get => _currentPageIndex;
+            set
+            {
+                if (_currentPageIndex != value && CurrentNotebook != null && 
+                    value >= 0 && value < CurrentNotebook.Pages.Count)
+                {
+                    _currentPageIndex = value;
+                    CurrentPage = CurrentNotebook.Pages[value];
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CurrentPage));
                 }
             }
         }
@@ -49,507 +93,585 @@ namespace GoodNotesClone.ViewModels
         public DrawingTool CurrentTool
         {
             get => _currentTool;
-            set => SetField(ref _currentTool, value, nameof(CurrentTool));
+            set
+            {
+                if (_currentTool != value)
+                {
+                    _currentTool = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CurrentToolDisplay));
+                }
+            }
         }
         
         public double ZoomLevel
         {
             get => _zoomLevel;
-            set => SetField(ref _zoomLevel, value.Clamp(0.1, 4.0), nameof(ZoomLevel));
-        }
-        
-        public string PageName => CurrentPage != null ? CurrentPage.Name : "No Page";
-        public string PageCount => CurrentNotebook != null ? $"{CurrentNotebook.Pages.Count}" : "0";
-        public int CurrentPageNumber => CurrentNotebook != null ? CurrentNotebook.CurrentPageIndex + 1 : 0;
-        
-        public ICommand NewNotebookCommand { get; }
-        public ICommand OpenNotebookCommand { get; }
-        public ICommand SaveNotebookCommand { get; }
-        public ICommand SaveAsNotebookCommand { get; }
-        public ICommand AddPageCommand { get; }
-        public ICommand RemovePageCommand { get; }
-        public ICommand NextPageCommand { get; }
-        public ICommand PreviousPageCommand { get; }
-        public ICommand UndoCommand { get; }
-        public ICommand RedoCommand { get; }
-        public ICommand ZoomInCommand { get; }
-        public ICommand ZoomOutCommand { get; }
-        public ICommand ResetZoomCommand { get; }
-        public ICommand SelectPenCommand { get; }
-        public ICommand SelectHighlighterCommand { get; }
-        public ICommand SelectEraserCommand { get; }
-        public ICommand SelectLassoCommand { get; }
-        public ICommand SelectHandCommand { get; }
-        public ICommand ClearPageCommand { get; }
-        public ICommand DeleteSelectedCommand { get; }
-        public ICommand SelectAllCommand { get; }
-        public ICommand DeselectAllCommand { get; }
-        public ICommand CopyCommand { get; }
-        public ICommand PasteCommand { get; }
-        public ICommand CutCommand { get; }
-        public ICommand SetPenColorCommand { get; }
-        public ICommand SetPenWidthCommand { get; }
-        
-        public MainViewModel()
-        {
-            _currentTool = new DrawingTool(ToolType.Pen, Colors.Black, 2.0);
-            _undoManager = new UndoManager(100);
-            
-            // Create a default notebook
-            CreateNewNotebook();
-            
-            // Initialize commands
-            NewNotebookCommand = new RelayCommand(() => CreateNewNotebook());
-            OpenNotebookCommand = new RelayCommand(() => OpenNotebook());
-            SaveNotebookCommand = new RelayCommand(() => SaveNotebook(), () => CurrentNotebook != null);
-            SaveAsNotebookCommand = new RelayCommand(() => SaveNotebookAs());
-            AddPageCommand = new RelayCommand(() => AddPage(PageTemplate.Blank));
-            RemovePageCommand = new RelayCommand(() => RemoveCurrentPage(), () => CurrentNotebook != null && CurrentNotebook.Pages.Count > 1);
-            NextPageCommand = new RelayCommand(() => NextPage(), () => CurrentNotebook != null && CurrentNotebook.CurrentPageIndex < CurrentNotebook.Pages.Count - 1);
-            PreviousPageCommand = new RelayCommand(() => PreviousPage(), () => CurrentNotebook != null && CurrentNotebook.CurrentPageIndex > 0);
-            UndoCommand = new RelayCommand(() => _undoManager.Undo(), () => _undoManager.CanUndo);
-            RedoCommand = new RelayCommand(() => _undoManager.Redo(), () => _undoManager.CanRedo);
-            ZoomInCommand = new RelayCommand(() => ZoomLevel += 0.1);
-            ZoomOutCommand = new RelayCommand(() => ZoomLevel -= 0.1);
-            ResetZoomCommand = new RelayCommand(() => ZoomLevel = 1.0);
-            SelectPenCommand = new RelayCommand(() => CurrentTool.SetPen(CurrentTool.Color, CurrentTool.Width, CurrentTool.PenType));
-            SelectHighlighterCommand = new RelayCommand(() => CurrentTool.SetHighlighter(Colors.Yellow, 8.0));
-            SelectEraserCommand = new RelayCommand(() => CurrentTool.SetEraser(10.0));
-            SelectLassoCommand = new RelayCommand(() => CurrentTool.SetLasso());
-            SelectHandCommand = new RelayCommand(() => CurrentTool.SetHand());
-            ClearPageCommand = new RelayCommand(() => ClearCurrentPage(), () => CurrentPage != null);
-            DeleteSelectedCommand = new RelayCommand(() => DeleteSelectedStrokes(), () => _selectedStrokes.Count > 0);
-            SelectAllCommand = new RelayCommand(() => SelectAllStrokes(), () => CurrentPage != null);
-            DeselectAllCommand = new RelayCommand(() => DeselectAllStrokes());
-            CopyCommand = new RelayCommand(() => CopySelected(), () => _selectedStrokes.Count > 0);
-            PasteCommand = new RelayCommand(() => PasteStrokes(), () => Clipboard.ContainsData(DataFormats.Text));
-            CutCommand = new RelayCommand(() => CutSelected(), () => _selectedStrokes.Count > 0);
-            SetPenColorCommand = new RelayCommand<string>(colorHex => SetPenColor(ColorUtils.FromHex(colorHex)));
-            SetPenWidthCommand = new RelayCommand<double>(width => SetPenWidth(width));
-            
-            // Update command states
-            _undoManager.CanUndoChanged += (s, e) => { (UndoCommand as RelayCommand)?.OnCanExecuteChanged(); };
-            _undoManager.CanRedoChanged += (s, e) => { (RedoCommand as RelayCommand)?.OnCanExecuteChanged(); };
-        }
-        
-        // Notebook operations
-        public void CreateNewNotebook()
-        {
-            var notebook = new Notebook("Untitled Notebook");
-            notebook.AddPage(PageTemplate.Blank);
-            Notebooks.Add(notebook);
-            CurrentNotebook = notebook;
-            CurrentPage = notebook.CurrentPage;
-            UpdatePagesCollection();
-        }
-        
-        public void OpenNotebook()
-        {
-            string filePath = FileDialogUtils.ShowOpenDialog("GoodNotes Clone Files (*.gnc)|*.gnc|All Files (*.*)|*.*", "Open Notebook");
-            if (string.IsNullOrEmpty(filePath)) return;
-            
-            try
+            set
             {
-                var notebook = JsonHelper.Load<Notebook>(filePath);
-                if (notebook != null)
+                if (_zoomLevel != value)
                 {
-                    notebook.FilePath = filePath;
-                    Notebooks.Add(notebook);
-                    CurrentNotebook = notebook;
-                    CurrentPage = notebook.CurrentPage;
-                    UpdatePagesCollection();
+                    _zoomLevel = Math.Clamp(value, 0.1, 3.0);
+                    OnPropertyChanged();
+                    ZoomChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
-            catch (Exception ex)
+        }
+        
+        public List<Stroke> SelectedStrokes
+        {
+            get => _selectedStrokes;
+            set
             {
-                DialogUtils.ShowMessage($"Error opening notebook: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _selectedStrokes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasSelection));
             }
         }
         
-        public void SaveNotebook()
+        public bool HasSelection => SelectedStrokes != null && SelectedStrokes.Count > 0;
+        
+        public string CurrentToolDisplay
+        {
+            get
+            {
+                if (CurrentTool == null) return "None";
+                switch (CurrentTool.Type)
+                {
+                    case ToolType.Pen: return "🖋️ Pen";
+                    case ToolType.Highlighter: return "🖍️ Highlighter";
+                    case ToolType.Eraser: return "🧽 Eraser";
+                    case ToolType.Lasso: return "🎯 Lasso";
+                    case ToolType.Hand: return "👋 Hand";
+                    default: return CurrentTool.Type.ToString();
+                }
+            }
+        }
+        
+        public string CurrentNotebookName
+        {
+            get => _currentNotebookName;
+            set
+            {
+                _currentNotebookName = value;
+                OnPropertyChanged();
+            }
+        }
+        
+        public string SearchQuery
+        {
+            get => _searchQuery;
+            set
+            {
+                _searchQuery = value;
+                OnPropertyChanged();
+            }
+        }
+        
+        #endregion
+        
+        #region Commands
+        
+        // File Commands
+        public ICommand NewNotebookCommand => new RelayCommand(NewNotebook);
+        public ICommand OpenNotebookCommand => new RelayCommand(OpenNotebook);
+        public ICommand SaveNotebookCommand => new RelayCommand(SaveNotebook);
+        public ICommand SaveAsNotebookCommand => new RelayCommand(SaveAsNotebook);
+        
+        // Page Commands
+        public ICommand AddPageCommand => new RelayCommand(AddPage);
+        public ICommand RemovePageCommand => new RelayCommand(RemovePage, CanRemovePage);
+        public ICommand NextPageCommand => new RelayCommand(NextPage, CanNextPage);
+        public ICommand PreviousPageCommand => new RelayCommand(PreviousPage, CanPreviousPage);
+        public ICommand GotoPageCommand => new RelayCommand<int>(GotoPage);
+        
+        // Tool Commands
+        public ICommand SetPenCommand => new RelayCommand(() => CurrentTool = new DrawingTool(ToolType.Pen));
+        public ICommand SetHighlighterCommand => new RelayCommand(() => CurrentTool = new DrawingTool(ToolType.Highlighter));
+        public ICommand SetEraserCommand => new RelayCommand(() => CurrentTool = new DrawingTool(ToolType.Eraser));
+        public ICommand SetLassoCommand => new RelayCommand(() => CurrentTool = new DrawingTool(ToolType.Lasso));
+        public ICommand SetHandCommand => new RelayCommand(() => CurrentTool = new DrawingTool(ToolType.Hand));
+        
+        // Edit Commands
+        public ICommand UndoCommand => new RelayCommand(Undo, CanUndo);
+        public ICommand RedoCommand => new RelayCommand(Redo, CanRedo);
+        public ICommand CopyCommand => new RelayCommand(Copy, CanCopy);
+        public ICommand PasteCommand => new RelayCommand(Paste, CanPaste);
+        public ICommand CutCommand => new RelayCommand(Cut, CanCut);
+        public ICommand DeleteSelectedCommand => new RelayCommand(DeleteSelected, CanDelete);
+        public ICommand SelectAllCommand => new RelayCommand(SelectAll);
+        
+        // Zoom Commands
+        public ICommand ZoomInCommand => new RelayCommand(ZoomIn);
+        public ICommand ZoomOutCommand => new RelayCommand(ZoomOut);
+        public ICommand ResetZoomCommand => new RelayCommand(ResetZoom);
+        
+        // Color and Width
+        public ICommand SetPenColorCommand => new RelayCommand<Color>(SetPenColor);
+        public ICommand SetPenWidthCommand => new RelayCommand<double>(SetPenWidth);
+        
+        #endregion
+        
+        #region Command Implementations
+        
+        // File Operations
+        private void NewNotebook()
+        {
+            var newNotebook = new Notebook
+            {
+                Name = "Untitled Notebook",
+                CreatedDate = DateTime.Now,
+                LastModified = DateTime.Now
+            };
+            
+            // Add a default page
+            newNotebook.AddPage(new Page
+            {
+                Name = "Page 1",
+                TemplateType = PageTemplate.Blank,
+                Width = 800,
+                Height = 1100
+            });
+            
+            Notebooks.Add(newNotebook);
+            CurrentNotebook = newNotebook;
+            CurrentPageIndex = 0;
+        }
+        
+        private void OpenNotebook()
+        {
+            var filePath = FileDialogUtils.ShowOpenDialog(
+                "GoodNotes Notebooks (*.gnc)|*.gnc|All Files (*.*)|*.*", 
+                "Open Notebook");
+            
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                var notebook = FileService.LoadNotebook(filePath);
+                if (notebook != null)
+                {
+                    Notebooks.Add(notebook);
+                    CurrentNotebook = notebook;
+                    CurrentPageIndex = 0;
+                }
+            }
+        }
+        
+        private void SaveNotebook()
         {
             if (CurrentNotebook == null) return;
             
             if (string.IsNullOrEmpty(CurrentNotebook.FilePath))
             {
-                SaveNotebookAs();
-                return;
+                SaveAsNotebook();
             }
-            
-            SaveNotebookInternal(CurrentNotebook.FilePath);
+            else
+            {
+                FileService.SaveNotebook(CurrentNotebook);
+                CurrentNotebook.LastModified = DateTime.Now;
+            }
         }
         
-        public void SaveNotebookAs()
+        private void SaveAsNotebook()
         {
             if (CurrentNotebook == null) return;
             
-            string filePath = FileDialogUtils.ShowSaveDialog("GoodNotes Clone Files (*.gnc)|*.gnc", "Save Notebook As", CurrentNotebook.Name);
-            if (string.IsNullOrEmpty(filePath)) return;
+            var filePath = FileDialogUtils.ShowSaveDialog(
+                "GoodNotes Notebooks (*.gnc)|*.gnc|All Files (*.*)|*.*",
+                "Save Notebook As",
+                CurrentNotebook.Name + ".gnc");
             
-            CurrentNotebook.FilePath = filePath;
-            CurrentNotebook.Name = Path.GetFileNameWithoutExtension(filePath);
-            SaveNotebookInternal(filePath);
-        }
-        
-        private void SaveNotebookInternal(string filePath)
-        {
-            try
+            if (!string.IsNullOrEmpty(filePath))
             {
-                CurrentNotebook.ModifiedDate = DateTime.Now;
-                JsonHelper.Save(filePath, CurrentNotebook);
-                DialogUtils.ShowMessage("Notebook saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                DialogUtils.ShowMessage($"Error saving notebook: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                CurrentNotebook.FilePath = filePath;
+                CurrentNotebook.Name = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                FileService.SaveNotebook(CurrentNotebook);
+                CurrentNotebook.LastModified = DateTime.Now;
             }
         }
         
-        private void UpdatePagesCollection()
-        {
-            Pages.Clear();
-            if (CurrentNotebook != null)
-            {
-                foreach (var page in CurrentNotebook.Pages)
-                    Pages.Add(page);
-            }
-            OnPropertyChanged(nameof(PageCount));
-        }
-        
-        // Page operations
-        public void AddPage(PageTemplate template)
+        // Page Operations
+        private void AddPage()
         {
             if (CurrentNotebook == null) return;
             
-            var oldPageIndex = CurrentNotebook.CurrentPageIndex;
-            CurrentNotebook.AddPage(template);
-            CurrentNotebook.CurrentPageIndex = CurrentNotebook.Pages.Count - 1;
-            CurrentPage = CurrentNotebook.CurrentPage;
-            UpdatePagesCollection();
-            
-            // Record undo action
-            _undoManager.AddAction(() =>
+            var newPage = new Page
             {
-                CurrentNotebook.RemovePageAt(CurrentNotebook.Pages.Count - 1);
-                CurrentNotebook.CurrentPageIndex = oldPageIndex;
-                CurrentPage = CurrentNotebook.CurrentPage;
-                UpdatePagesCollection();
+                Name = "Page " + (CurrentNotebook.Pages.Count + 1),
+                TemplateType = PageTemplate.Blank,
+                Width = CurrentNotebook.Pages.Count > 0 ? CurrentNotebook.Pages[0].Width : 800,
+                Height = CurrentNotebook.Pages.Count > 0 ? CurrentNotebook.Pages[0].Height : 1100
+            };
+            
+            CurrentNotebook.AddPage(newPage);
+            CurrentPageIndex = CurrentNotebook.Pages.Count - 1;
+            
+            // Add to undo stack
+            UndoManager.Push(new UndoAction
+            {
+                Action = UndoActionType.AddPage,
+                Notebook = CurrentNotebook,
+                PageIndex = CurrentPageIndex
             });
         }
         
-        public void RemoveCurrentPage()
+        private bool CanRemovePage() => CurrentNotebook != null && CurrentNotebook.Pages.Count > 1;
+        
+        private void RemovePage()
         {
             if (CurrentNotebook == null || CurrentNotebook.Pages.Count <= 1) return;
             
-            var page = CurrentPage;
-            var pageIndex = CurrentNotebook.CurrentPageIndex;
+            var removedPage = CurrentNotebook.Pages[CurrentPageIndex];
+            CurrentNotebook.RemovePage(CurrentPageIndex);
             
-            CurrentNotebook.RemovePageAt(pageIndex);
-            CurrentPage = CurrentNotebook.CurrentPage;
-            UpdatePagesCollection();
-            
-            // Record undo action
-            _undoManager.AddAction(() =>
+            // Adjust current page index
+            if (CurrentPageIndex >= CurrentNotebook.Pages.Count)
             {
-                CurrentNotebook.Pages.Insert(pageIndex, page);
-                CurrentNotebook.UpdatePageIndices();
-                CurrentNotebook.CurrentPageIndex = pageIndex;
-                CurrentPage = CurrentNotebook.CurrentPage;
-                UpdatePagesCollection();
+                CurrentPageIndex = CurrentNotebook.Pages.Count - 1;
+            }
+            
+            // Add to undo stack
+            UndoManager.Push(new UndoAction
+            {
+                Action = UndoActionType.RemovePage,
+                Notebook = CurrentNotebook,
+                Page = removedPage,
+                PageIndex = CurrentPageIndex
             });
         }
         
-        public void NextPage()
-        {
-            if (CurrentNotebook == null) return;
-            CurrentNotebook.GoToNextPage();
-            CurrentPage = CurrentNotebook.CurrentPage;
-        }
+        private bool CanNextPage() => CurrentNotebook != null && CurrentPageIndex < CurrentNotebook.Pages.Count - 1;
         
-        public void PreviousPage()
+        private void NextPage()
         {
-            if (CurrentNotebook == null) return;
-            CurrentNotebook.GoToPreviousPage();
-            CurrentPage = CurrentNotebook.CurrentPage;
-        }
-        
-        public void ClearCurrentPage()
-        {
-            if (CurrentPage == null) return;
-            
-            var strokes = CurrentPage.Strokes.ToList();
-            CurrentPage.Clear();
-            
-            // Record undo action
-            _undoManager.AddAction(() =>
+            if (CanNextPage())
             {
-                foreach (var stroke in strokes)
-                    CurrentPage.AddStroke(stroke);
-            });
+                CurrentPageIndex++;
+            }
         }
         
-        // Drawing operations
-        public void StartDrawing(Point point)
+        private bool CanPreviousPage() => CurrentNotebook != null && CurrentPageIndex > 0;
+        
+        private void PreviousPage()
         {
-            if (CurrentPage == null || CurrentTool.Type == ToolType.Hand || CurrentTool.Type == ToolType.Lasso) return;
-            
-            _isDrawing = true;
-            _lastPoint = point;
-            
-            if (CurrentTool.Type == ToolType.Eraser)
+            if (CanPreviousPage())
             {
-                // Eraser mode: select and delete strokes under the point
-                var strokesToDelete = CurrentPage.Strokes.GetStrokesInRect(new Rect(point.X - 5, point.Y - 5, 10, 10));
-                if (strokesToDelete.Count > 0)
+                CurrentPageIndex--;
+            }
+        }
+        
+        private void GotoPage(int index)
+        {
+            if (CurrentNotebook != null && index >= 0 && index < CurrentNotebook.Pages.Count)
+            {
+                CurrentPageIndex = index;
+            }
+        }
+        
+        // Tool Operations
+        private void SetPenColor(Color color)
+        {
+            if (CurrentTool != null)
+            {
+                CurrentTool.Color = color;
+            }
+        }
+        
+        private void SetPenWidth(double width)
+        {
+            if (CurrentTool != null)
+            {
+                CurrentTool.Width = width;
+            }
+        }
+        
+        // Edit Operations
+        private void Undo()
+        {
+            var action = UndoManager.Undo();
+            if (action != null)
+            {
+                switch (action.Action)
                 {
-                    foreach (var stroke in strokesToDelete)
-                        CurrentPage.RemoveStroke(stroke);
+                    case UndoActionType.AddStroke:
+                        if (action.Page != null && action.StrokeIndex >= 0 && action.StrokeIndex < action.Page.Strokes.Count)
+                        {
+                            action.Page.Strokes.RemoveAt(action.StrokeIndex);
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
+                    case UndoActionType.RemoveStroke:
+                        if (action.Page != null && action.Stroke != null)
+                        {
+                            action.Page.Strokes.Insert(action.StrokeIndex, action.Stroke);
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
+                    case UndoActionType.AddPage:
+                        if (action.Notebook != null && action.PageIndex >= 0 && action.PageIndex < action.Notebook.Pages.Count)
+                        {
+                            action.Notebook.RemovePage(action.PageIndex);
+                            if (CurrentPageIndex >= action.Notebook.Pages.Count)
+                            {
+                                CurrentPageIndex = action.Notebook.Pages.Count - 1;
+                            }
+                        }
+                        break;
+                    case UndoActionType.RemovePage:
+                        if (action.Notebook != null && action.Page != null)
+                        {
+                            action.Notebook.Pages.Insert(action.PageIndex, action.Page);
+                            if (CurrentNotebook == action.Notebook)
+                            {
+                                CurrentPageIndex = action.PageIndex;
+                            }
+                        }
+                        break;
+                    case UndoActionType.ModifyStroke:
+                        if (action.Page != null && action.StrokeIndex >= 0 && action.StrokeIndex < action.Page.Strokes.Count && action.OldStroke != null)
+                        {
+                            action.Page.Strokes[action.StrokeIndex] = action.OldStroke;
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
                 }
             }
-            else
-            {
-                // Create a new stroke
-                _currentStroke = CurrentTool.CreateStroke();
-                _currentStroke.AddPoint(point);
-            }
         }
         
-        public void ContinueDrawing(Point point)
-        {
-            if (!_isDrawing || CurrentPage == null || _currentStroke == null) return;
-            
-            if (CurrentTool.Type == ToolType.Eraser)
-            {
-                // Eraser: continue deleting
-                var lineRect = new Rect(
-                    Math.Min(_lastPoint.X, point.X) - 5,
-                    Math.Min(_lastPoint.Y, point.Y) - 5,
-                    Math.Abs(_lastPoint.X - point.X) + 10,
-                    Math.Abs(_lastPoint.Y - point.Y) + 10);
-                
-                var strokesToDelete = CurrentPage.Strokes.GetStrokesInRect(lineRect);
-                foreach (var stroke in strokesToDelete)
-                    CurrentPage.RemoveStroke(stroke);
-            }
-            else
-            {
-                // Add point to current stroke
-                _currentStroke.AddPoint(point);
-            }
-            
-            _lastPoint = point;
-        }
+        private bool CanUndo() => UndoManager.CanUndo;
         
-        public void EndDrawing(Point point)
+        private void Redo()
         {
-            if (!_isDrawing || CurrentPage == null || _currentStroke == null) return;
-            
-            if (CurrentTool.Type == ToolType.Eraser)
+            var action = UndoManager.Redo();
+            if (action != null)
             {
-                // Final eraser stroke
-                var lineRect = new Rect(
-                    Math.Min(_lastPoint.X, point.X) - 5,
-                    Math.Min(_lastPoint.Y, point.Y) - 5,
-                    Math.Abs(_lastPoint.X - point.X) + 10,
-                    Math.Abs(_lastPoint.Y - point.Y) + 10);
-                
-                var strokesToDelete = CurrentPage.Strokes.GetStrokesInRect(lineRect);
-                if (strokesToDelete.Count > 0)
+                switch (action.Action)
                 {
-                    // Record undo action for eraser
-                    _undoManager.AddAction(() =>
-                    {
-                        foreach (var stroke in strokesToDelete)
-                            CurrentPage.AddStroke(stroke);
-                    });
+                    case UndoActionType.AddStroke:
+                        if (action.Page != null && action.Stroke != null)
+                        {
+                            action.Page.Strokes.Insert(action.StrokeIndex, action.Stroke);
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
+                    case UndoActionType.RemoveStroke:
+                        if (action.Page != null && action.StrokeIndex >= 0 && action.StrokeIndex < action.Page.Strokes.Count)
+                        {
+                            action.Page.Strokes.RemoveAt(action.StrokeIndex);
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
+                    case UndoActionType.AddPage:
+                        if (action.Notebook != null && action.Page != null)
+                        {
+                            action.Notebook.Pages.Insert(action.PageIndex, action.Page);
+                            if (CurrentNotebook == action.Notebook)
+                            {
+                                CurrentPageIndex = action.PageIndex;
+                            }
+                        }
+                        break;
+                    case UndoActionType.RemovePage:
+                        if (action.Notebook != null && action.PageIndex >= 0 && action.PageIndex < action.Notebook.Pages.Count)
+                        {
+                            action.Notebook.RemovePage(action.PageIndex);
+                            if (CurrentPageIndex >= action.Notebook.Pages.Count)
+                            {
+                                CurrentPageIndex = action.Notebook.Pages.Count - 1;
+                            }
+                        }
+                        break;
+                    case UndoActionType.ModifyStroke:
+                        if (action.Page != null && action.StrokeIndex >= 0 && action.StrokeIndex < action.Page.Strokes.Count && action.NewStroke != null)
+                        {
+                            action.Page.Strokes[action.StrokeIndex] = action.NewStroke;
+                            StrokesChanged?.Invoke(this, EventArgs.Empty);
+                        }
+                        break;
                 }
             }
-            else if (_currentStroke.Points.Count > 1)
-            {
-                // Add stroke to page
-                CurrentPage.AddStroke(_currentStroke);
-                
-                // Record undo action
-                _undoManager.AddAction(() =>
-                {
-                    CurrentPage.RemoveStroke(_currentStroke);
-                });
-            }
-            
-            _isDrawing = false;
-            _currentStroke = null;
         }
         
-        // Stroke selection
-        public void SelectStroke(Stroke stroke, bool multiSelect = false)
+        private bool CanRedo() => UndoManager.CanRedo;
+        
+        private void Copy()
+        {
+            if (HasSelection)
+            {
+                // Copy selected strokes to clipboard
+                var strokes = SelectedStrokes.Select(s => s.Clone()).ToList();
+                Clipboard.SetDataObject(strokes, true);
+            }
+        }
+        
+        private bool CanCopy() => HasSelection;
+        
+        private void Paste()
         {
             if (CurrentPage == null) return;
             
-            if (!multiSelect)
-                DeselectAllStrokes();
-            
-            stroke.IsSelected = true;
-            if (!_selectedStrokes.Contains(stroke))
-                _selectedStrokes.Add(stroke);
-            
-            OnPropertyChanged(nameof(HasSelectedStrokes));
-        }
-        
-        public void SelectStrokesInRect(Rect rect)
-        {
-            if (CurrentPage == null) return;
-            
-            DeselectAllStrokes();
-            
-            var strokes = CurrentPage.Strokes.GetStrokesInRect(rect);
-            foreach (var stroke in strokes)
+            if (Clipboard.ContainsData(Stroke.StrokeDataFormat))
             {
-                stroke.IsSelected = true;
-                _selectedStrokes.Add(stroke);
-            }
-            
-            OnPropertyChanged(nameof(HasSelectedStrokes));
-        }
-        
-        public void SelectAllStrokes()
-        {
-            if (CurrentPage == null) return;
-            
-            DeselectAllStrokes();
-            foreach (var stroke in CurrentPage.Strokes)
-            {
-                stroke.IsSelected = true;
-                _selectedStrokes.Add(stroke);
-            }
-            
-            OnPropertyChanged(nameof(HasSelectedStrokes));
-        }
-        
-        public void DeselectAllStrokes()
-        {
-            foreach (var stroke in _selectedStrokes)
-                stroke.IsSelected = false;
-            _selectedStrokes.Clear();
-            OnPropertyChanged(nameof(HasSelectedStrokes));
-        }
-        
-        public void DeleteSelectedStrokes()
-        {
-            if (_selectedStrokes.Count == 0) return;
-            
-            var strokesToDelete = _selectedStrokes.ToList();
-            
-            // Record undo action
-            _undoManager.AddAction(() =>
-            {
-                foreach (var stroke in strokesToDelete)
-                {
-                    CurrentPage.AddStroke(stroke);
-                    stroke.IsSelected = true;
-                }
-                _selectedStrokes = strokesToDelete;
-                OnPropertyChanged(nameof(HasSelectedStrokes));
-            });
-            
-            foreach (var stroke in strokesToDelete)
-                CurrentPage.RemoveStroke(stroke);
-            
-            _selectedStrokes.Clear();
-            OnPropertyChanged(nameof(HasSelectedStrokes));
-        }
-        
-        public bool HasSelectedStrokes => _selectedStrokes.Count > 0;
-        
-        // Clipboard operations
-        public void CopySelected()
-        {
-            if (_selectedStrokes.Count == 0) return;
-            
-            var strokesJson = JsonHelper.Serialize(_selectedStrokes);
-            Clipboard.SetText(strokesJson);
-        }
-        
-        public void PasteStrokes()
-        {
-            if (!Clipboard.ContainsText()) return;
-            
-            try
-            {
-                var strokesJson = Clipboard.GetText();
-                var strokes = JsonHelper.Deserialize<List<Stroke>>(strokesJson);
-                if (strokes != null && CurrentPage != null)
+                var strokes = Clipboard.GetData(Stroke.StrokeDataFormat) as List<Stroke>;
+                if (strokes != null)
                 {
                     // Offset pasted strokes
                     double offsetX = 20, offsetY = 20;
                     foreach (var stroke in strokes)
                     {
-                        var cloned = stroke.Clone();
-                        cloned.Translate(offsetX, offsetY);
-                        CurrentPage.AddStroke(cloned);
-                        cloned.IsSelected = true;
-                        _selectedStrokes.Add(cloned);
+                        var newStroke = stroke.Clone();
+                        for (int i = 0; i < newStroke.Points.Count; i++)
+                        {
+                            newStroke.Points[i] = new Point(
+                                newStroke.Points[i].X + offsetX,
+                                newStroke.Points[i].Y + offsetY);
+                        }
+                        CurrentPage.Strokes.Add(newStroke);
+                        AddStrokeToHistory(newStroke);
                     }
-                    
-                    // Record undo action
-                    _undoManager.AddAction(() =>
-                    {
-                        foreach (var stroke in _selectedStrokes.ToList())
-                            CurrentPage.RemoveStroke(stroke);
-                        _selectedStrokes.Clear();
-                        OnPropertyChanged(nameof(HasSelectedStrokes));
-                    });
-                    
-                    OnPropertyChanged(nameof(HasSelectedStrokes));
+                    StrokesChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
-            catch (Exception ex)
+        }
+        
+        private bool CanPaste() => CurrentPage != null && Clipboard.ContainsData(Stroke.StrokeDataFormat);
+        
+        private void Cut()
+        {
+            if (HasSelection && CurrentPage != null)
             {
-                DialogUtils.ShowMessage($"Error pasting: {ex.Message}", "Error");
+                var strokes = SelectedStrokes.Select(s => s.Clone()).ToList();
+                Clipboard.SetDataObject(strokes, true);
+                
+                // Remove from page
+                foreach (var stroke in SelectedStrokes)
+                {
+                    CurrentPage.Strokes.Remove(stroke);
+                }
+                
+                SelectedStrokes = new List<Stroke>();
+                StrokesChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         
-        public void CutSelected()
-        {
-            CopySelected();
-            DeleteSelectedStrokes();
-        }
+        private bool CanCut() => HasSelection && CurrentPage != null;
         
-        // Tool operations
-        public void SetPenColor(Color color)
+        private void DeleteSelected()
         {
-            CurrentTool.Color = color;
-            if (CurrentTool.Type == ToolType.Pen || CurrentTool.Type == ToolType.Highlighter)
-                CurrentTool.IsHighlighter = CurrentTool.Type == ToolType.Highlighter;
-        }
-        
-        public void SetPenWidth(double width)
-        {
-            CurrentTool.Width = width.Clamp(Constants.MinStrokeWidth, Constants.MaxStrokeWidth);
-        }
-        
-        public void SetTool(ToolType tool)
-        {
-            switch (tool)
+            if (HasSelection && CurrentPage != null)
             {
-                case ToolType.Pen:
-                    CurrentTool.SetPen(CurrentTool.Color, CurrentTool.Width, CurrentTool.PenType);
-                    break;
-                case ToolType.Highlighter:
-                    CurrentTool.SetHighlighter(Colors.Yellow, 8.0);
-                    break;
-                case ToolType.Eraser:
-                    CurrentTool.SetEraser(10.0);
-                    break;
-                case ToolType.Lasso:
-                    CurrentTool.SetLasso();
-                    break;
-                case ToolType.Hand:
-                    CurrentTool.SetHand();
-                    break;
-                case ToolType.Text:
-                    CurrentTool.SetText();
-                    break;
+                // Save to undo stack
+                var strokesToRemove = new List<Stroke>(SelectedStrokes);
+                foreach (var stroke in strokesToRemove)
+                {
+                    var index = CurrentPage.Strokes.IndexOf(stroke);
+                    UndoManager.Push(new UndoAction
+                    {
+                        Action = UndoActionType.RemoveStroke,
+                        Page = CurrentPage,
+                        Stroke = stroke.Clone(),
+                        StrokeIndex = index
+                    });
+                }
+                
+                // Remove from page
+                foreach (var stroke in SelectedStrokes)
+                {
+                    CurrentPage.Strokes.Remove(stroke);
+                }
+                
+                SelectedStrokes = new List<Stroke>();
+                StrokesChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+        
+        private bool CanDelete() => HasSelection && CurrentPage != null;
+        
+        private void SelectAll()
+        {
+            if (CurrentPage != null)
+            {
+                SelectedStrokes = new List<Stroke>(CurrentPage.Strokes);
+            }
+        }
+        
+        // Zoom Operations
+        private void ZoomIn() => ZoomLevel += 0.1;
+        private void ZoomOut() => ZoomLevel -= 0.1;
+        private void ResetZoom() => ZoomLevel = 1.0;
+        
+        // Helper Methods
+        public void AddStrokeToHistory(Stroke stroke)
+        {
+            UndoManager.Push(new UndoAction
+            {
+                Action = UndoActionType.AddStroke,
+                Page = CurrentPage,
+                Stroke = stroke.Clone(),
+                StrokeIndex = CurrentPage.Strokes.Count - 1
+            });
+        }
+        
+        #endregion
+    }
+    
+    // Undo/Redo Management
+    public enum UndoActionType
+    {
+        AddStroke,
+        RemoveStroke,
+        ModifyStroke,
+        AddPage,
+        RemovePage
+    }
+    
+    public class UndoAction
+    {
+        public UndoActionType Action { get; set; }
+        public Notebook Notebook { get; set; }
+        public Page Page { get; set; }
+        public Stroke Stroke { get; set; }
+        public Stroke OldStroke { get; set; }
+        public Stroke NewStroke { get; set; }
+        public int StrokeIndex { get; set; }
+        public int PageIndex { get; set; }
+    }
+    
+    public class UndoManager
+    {
+        private Stack<UndoAction> _undoStack = new Stack<UndoAction>();
+        private Stack<UndoAction> _redoStack = new Stack<UndoAction>();
+        
+        public bool CanUndo => _undoStack.Count > 0;
+        public bool CanRedo => _redoStack.Count > 0;
+        
+        public void Push(UndoAction action)
+        {
+            _undoStack.Push(action);
+            _redoStack.Clear(); // Clear redo stack when new action is pushed
+        }
+        
+        public UndoAction Undo()
+        {
+            if (_undoStack.Count == 0) return null;
+            
+            var action = _undoStack.Pop();
+            _redoStack.Push(action);
+            return action;
+        }
+        
+        public UndoAction Redo()
+        {
+            if (_redoStack.Count == 0) return null;
+            
+            var action = _redoStack.Pop();
+            _undoStack.Push(action);
+            return action;
+        }
+        
+        public void Clear()
+        {
+            _undoStack.Clear();
+            _redoStack.Clear();
         }
     }
 }

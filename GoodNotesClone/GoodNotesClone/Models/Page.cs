@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace GoodNotesClone.Models
 {
@@ -10,7 +11,7 @@ namespace GoodNotesClone.Models
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Name { get; set; } = "Untitled Page";
         public int Index { get; set; } = 0;
-        public PageTemplate Template { get; set; } = PageTemplate.Blank;
+        public PageTemplate TemplateType { get; set; } = PageTemplate.Blank;
         public double Width { get; set; } = 800;
         public double Height { get; set; } = 1131;
         public Color BackgroundColor { get; set; } = Colors.White;
@@ -18,6 +19,72 @@ namespace GoodNotesClone.Models
         public DateTime CreatedDate { get; set; } = DateTime.Now;
         public DateTime ModifiedDate { get; set; } = DateTime.Now;
         public bool IsVisible { get; set; } = true;
+        
+        // For backward compatibility
+        public PageTemplate Template
+        {
+            get => TemplateType;
+            set => TemplateType = value;
+        }
+        
+        public List<Line> TemplateLines { get; set; } = new List<Line>();
+        
+        public void GenerateTemplateLines()
+        {
+            TemplateLines.Clear();
+            
+            switch (TemplateType)
+            {
+                case PageTemplate.Lined:
+                    for (double y = 0; y < Height; y += 30)
+                    {
+                        TemplateLines.Add(new Line
+                        {
+                            X1 = 0,
+                            Y1 = y,
+                            X2 = Width,
+                            Y2 = y,
+                            Stroke = Brushes.LightGray,
+                            StrokeThickness = 1,
+                            StrokeDashArray = new DoubleCollection { 5, 5 }
+                        });
+                    }
+                    break;
+                    
+                case PageTemplate.Grid:
+                    for (double x = 0; x < Width; x += 20)
+                    {
+                        TemplateLines.Add(new Line
+                        {
+                            X1 = x,
+                            Y1 = 0,
+                            X2 = x,
+                            Y2 = Height,
+                            Stroke = Brushes.LightGray,
+                            StrokeThickness = 1,
+                            StrokeDashArray = new DoubleCollection { 5, 5 }
+                        });
+                    }
+                    for (double y = 0; y < Height; y += 20)
+                    {
+                        TemplateLines.Add(new Line
+                        {
+                            X1 = 0,
+                            Y1 = y,
+                            X2 = Width,
+                            Y2 = y,
+                            Stroke = Brushes.LightGray,
+                            StrokeThickness = 1,
+                            StrokeDashArray = new DoubleCollection { 5, 5 }
+                        });
+                    }
+                    break;
+                    
+                case PageTemplate.Dotted:
+                    // Dots don't need lines, they'll be drawn as ellipses
+                    break;
+            }
+        }
         
         public Page() { }
         

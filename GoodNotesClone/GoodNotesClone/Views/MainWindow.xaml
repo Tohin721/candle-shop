@@ -3,197 +3,565 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:GoodNotesClone.Views"
-        xmlns:converters="clr-namespace:GoodNotesClone.Converters"
+        xmlns:local="clr-namespace:GoodNotesClone"
+        xmlns:viewModels="clr-namespace:GoodNotesClone.ViewModels"
         mc:Ignorable="d"
-        Title="GoodNotes Clone" Height="700" Width="1000" WindowState="Maximized">
+        Title="GoodNotes Clone" Height="700" Width="1000" WindowState="Maximized"
+        Background="{StaticResource GoodNotesToolbarDark}" ResizeMode="CanResizeWithGrip">
     
     <Window.Resources>
-        <converters:ToolTypeToPenCheckedConverter x:Key="ToolTypeToPenCheckedConverter"/>
-        <converters:ToolTypeToHighlighterCheckedConverter x:Key="ToolTypeToHighlighterCheckedConverter"/>
-        <converters:ToolTypeToEraserCheckedConverter x:Key="ToolTypeToEraserCheckedConverter"/>
-        <converters:ToolTypeToLassoCheckedConverter x:Key="ToolTypeToLassoCheckedConverter"/>
-        <converters:ToolTypeToHandCheckedConverter x:Key="ToolTypeToHandCheckedConverter"/>
+        <!-- GoodNotes Color Palette -->
+        <Color x:Key="GoodNotesDarkBlue">#1E3A8A</Color>
+        <Color x:Key="GoodNotesToolbarDark">#2B2B2B</Color>
+        <Color x:Key="GoodNotesCanvasBeige">#FDF6E3</Color>
+        <Color x:Key="GoodNotesAccentBlue">#0078D7</Color>
+        <Color x:Key="GoodNotesTextLight">#FFFFFF</Color>
+        <Color x:Key="GoodNotesTextDark">#2B2B2B</Color>
+        <Color x:Key="GoodNotesHover">#3E3E3E</Color>
+        
+        <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{StaticResource GoodNotesDarkBlue}"/>
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="{StaticResource GoodNotesToolbarDark}"/>
+        <SolidColorBrush x:Key="CanvasBackgroundBrush" Color="{StaticResource GoodNotesCanvasBeige}"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource GoodNotesAccentBlue}"/>
+        <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource GoodNotesTextLight}"/>
+        <SolidColorBrush x:Key="TextDarkBrush" Color="{StaticResource GoodNotesTextDark}"/>
+        
+        <!-- Tool Button Style - GoodNotes Style -->
+        <Style x:Key="GoodNotesToolButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource GoodNotesHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#0078D7"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Toggle Button Style -->
+        <Style x:Key="GoodNotesToggleButton" TargetType="ToggleButton" BasedOn="{StaticResource GoodNotesToolButton}">
+            <Setter Property="IsChecked" Value="False"/>
+        </Style>
+        
+        <!-- Sidebar Button Style -->
+        <Style x:Key="SidebarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentPresenter VerticalAlignment="Center"/>
+                                <TextBlock Text="{TemplateBinding Content}" Margin="10,0,0,0" 
+                                           VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#2A4A9A"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#0078D7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Notebook Item Style -->
+        <Style x:Key="NotebookItemStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource CanvasBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="#DDDDDD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="8"/>
+            <Setter Property="Width" Value="140"/>
+            <Setter Property="Height" Value="180"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="4">
+                            <StackPanel VerticalAlignment="Stretch" HorizontalAlignment="Center">
+                                <Viewbox Width="40" Height="40" Margin="0,8,0,0">
+                                    <Path Fill="{StaticResource GoodNotesDarkBlue}" Data="M0,0 L10,5 L0,10 Z"/>
+                                </Viewbox>
+                                <TextBlock Text="{TemplateBinding Content}" 
+                                           FontSize="14" FontWeight="SemiBold" 
+                                           Margin="0,8,0,0" 
+                                           TextWrapping="Wrap" 
+                                           TextAlignment="Center"/>
+                                <TextBlock Text="Last edited: Today" 
+                                           FontSize="10" Foreground="#666666" 
+                                           Margin="0,4,0,0" 
+                                           TextAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Background" Value="#F0F8FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     
+    <!-- Main Layout -->
     <DockPanel>
-        <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="0,0,0,1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- Sidebar - Left -->
+        <Border DockPanel.Dock="Left" Width="200" Background="{StaticResource SidebarBackgroundBrush}">
+            <StackPanel VerticalAlignment="Stretch">
+                <!-- Logo/Title -->
+                <Border Padding="16,20" Background="{StaticResource SidebarBackgroundBrush}">
+                    <TextBlock Text="📓 GoodNotes" FontSize="18" FontWeight="Bold" 
+                               Foreground="{StaticResource TextLightBrush}" 
+                               HorizontalAlignment="Left"/>
+                </Border>
                 
-                <!-- File Menu -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <Button Content="New" ToolTip="New Notebook (Ctrl+N)" Command="{Binding NewNotebookCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}"/>
-                    <Button Content="Open" ToolTip="Open Notebook (Ctrl+O)" Command="{Binding OpenNotebookCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}"/>
-                    <Button Content="Save" ToolTip="Save Notebook (Ctrl+S)" Command="{Binding SaveNotebookCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}"/>
-                </StackPanel>
+                <!-- Navigation Menu -->
+                <ListBox x:Name="NavigationList" 
+                         Background="Transparent" 
+                         BorderBrush="Transparent" 
+                         BorderThickness="0" 
+                         SelectionMode="Single">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    
+                    <!-- Documents -->
+                    <Button Style="{StaticResource SidebarButtonStyle}" 
+                            Content="📄 Documents" 
+                            Tag="Documents" 
+                            IsSelected="True"
+                            Click="Navigation_Click"/>
+                    
+                    <!-- Favorites -->
+                    <Button Style="{StaticResource SidebarButtonStyle}" 
+                            Content="⭐ Favorites" 
+                            Tag="Favorites"
+                            Click="Navigation_Click"/>
+                    
+                    <!-- Shared -->
+                    <Button Style="{StaticResource SidebarButtonStyle}" 
+                            Content="👥 Shared" 
+                            Tag="Shared"
+                            Click="Navigation_Click"/>
+                    
+                    <!-- Marketplace -->
+                    <Button Style="{StaticResource SidebarButtonStyle}" 
+                            Content="🛒 Marketplace" 
+                            Tag="Marketplace"
+                            Click="Navigation_Click"/>
+                    
+                    <!-- Trash -->
+                    <Button Style="{StaticResource SidebarButtonStyle}" 
+                            Content="🗑️ Trash" 
+                            Tag="Trash"
+                            Click="Navigation_Click"/>
+                </ListBox>
                 
-                <!-- Tools -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button Content="Pen" ToolTip="Pen (P)" Command="{Binding SelectPenCommand}" 
-                            Margin="2" Padding="8,4" 
-                            Style="{StaticResource ToolButtonStyle}" 
-                            IsChecked="{Binding CurrentTool.Type, Converter={StaticResource ToolTypeToPenCheckedConverter}}"/>
-                    <Button Content="Highlighter" ToolTip="Highlighter (H)" Command="{Binding SelectHighlighterCommand}" 
-                            Margin="2" Padding="8,4" 
-                            Style="{StaticResource ToolButtonStyle}" 
-                            IsChecked="{Binding CurrentTool.Type, Converter={StaticResource ToolTypeToHighlighterCheckedConverter}}"/>
-                    <Button Content="Eraser" ToolTip="Eraser (E)" Command="{Binding SelectEraserCommand}" 
-                            Margin="2" Padding="8,4" 
-                            Style="{StaticResource ToolButtonStyle}" 
-                            IsChecked="{Binding CurrentTool.Type, Converter={StaticResource ToolTypeToEraserCheckedConverter}}"/>
-                    <Button Content="Lasso" ToolTip="Lasso Tool (L)" Command="{Binding SelectLassoCommand}" 
-                            Margin="2" Padding="8,4" 
-                            Style="{StaticResource ToolButtonStyle}" 
-                            IsChecked="{Binding CurrentTool.Type, Converter={StaticResource ToolTypeToLassoCheckedConverter}}"/>
-                    <Button Content="Hand" ToolTip="Hand Tool" Command="{Binding SelectHandCommand}" 
-                            Margin="2" Padding="8,4" 
-                            Style="{StaticResource ToolButtonStyle}" 
-                            IsChecked="{Binding CurrentTool.Type, Converter={StaticResource ToolTypeToHandCheckedConverter}}"/>
-                </StackPanel>
+                <!-- Spacer -->
+                <Border Height="1" Background="#3A5A9A" Margin="12,8"/>
                 
-                <!-- Colors -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button ToolTip="Black" Command="{Binding SetPenColorCommand}" CommandParameter="#FF000000"
-                            Margin="2" Padding="8,4" Style="{StaticResource ColorButtonStyle}" Background="Black"/>
-                    <Button ToolTip="Red" Command="{Binding SetPenColorCommand}" CommandParameter="#FFFF0000"
-                            Margin="2" Padding="8,4" Style="{StaticResource ColorButtonStyle}" Background="Red"/>
-                    <Button ToolTip="Blue" Command="{Binding SetPenColorCommand}" CommandParameter="#FF0000FF"
-                            Margin="2" Padding="8,4" Style="{StaticResource ColorButtonStyle}" Background="Blue"/>
-                    <Button ToolTip="Green" Command="{Binding SetPenColorCommand}" CommandParameter="#FF008000"
-                            Margin="2" Padding="8,4" Style="{StaticResource ColorButtonStyle}" Background="Green"/>
-                    <Button ToolTip="More Colors" Command="{Binding SetPenColorCommand}" CommandParameter="Custom"
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Content="..." Width="32"/>
-                </StackPanel>
+                <!-- Notebooks Section -->
+                <Expander Header="📚 Notebooks" 
+                          Background="Transparent" 
+                          Foreground="{StaticResource TextLightBrush}" 
+                          FontSize="14" FontWeight="SemiBold" 
+                          Margin="4,0,4,0">
+                    <ListBox x:Name="NotebookList" 
+                             Background="Transparent" 
+                             BorderBrush="Transparent" 
+                             BorderThickness="0"
+                             SelectionChanged="NotebookList_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="12,6"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                </Expander>
                 
-                <!-- Widths -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button ToolTip="Thin (1px)" Command="{Binding SetPenWidthCommand}" CommandParameter="1"
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Content="1px" Width="40"/>
-                    <Button ToolTip="Medium (2px)" Command="{Binding SetPenWidthCommand}" CommandParameter="2"
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Content="2px" Width="40"/>
-                    <Button ToolTip="Thick (4px)" Command="{Binding SetPenWidthCommand}" CommandParameter="4"
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Content="4px" Width="40"/>
-                    <Button ToolTip="Very Thick (8px)" Command="{Binding SetPenWidthCommand}" CommandParameter="8"
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Content="8px" Width="40"/>
-                </StackPanel>
+                <!-- Pages Section -->
+                <Expander Header="📄 Pages" 
+                          Background="Transparent" 
+                          Foreground="{StaticResource TextLightBrush}" 
+                          FontSize="14" FontWeight="SemiBold" 
+                          Margin="4,0,4,0">
+                    <ListBox x:Name="PageList" 
+                             Background="Transparent" 
+                             BorderBrush="Transparent" 
+                             BorderThickness="0"
+                             SelectionChanged="PageList_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="24,6"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                </Expander>
                 
-                <!-- Page Navigation -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button Content="&lt;" ToolTip="Previous Page" Command="{Binding PreviousPageCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                    <TextBlock Text="{Binding CurrentPageNumber}" VerticalAlignment="Center" Margin="5,0" FontSize="14"/>
-                    <TextBlock Text="/" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="14"/>
-                    <TextBlock Text="{Binding PageCount}" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="14"/>
-                    <Button Content="&gt;" ToolTip="Next Page" Command="{Binding NextPageCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                    <Button Content="+" ToolTip="Add Page" Command="{Binding AddPageCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                    <Button Content="-" ToolTip="Remove Page" Command="{Binding RemovePageCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                </StackPanel>
-                
-                <!-- Zoom -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button Content="-" ToolTip="Zoom Out" Command="{Binding ZoomOutCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                    <TextBlock Text="{Binding ZoomLevel, StringFormat='{0:P0}'}" VerticalAlignment="Center" Margin="5,0" FontSize="14"/>
-                    <Button Content="+" ToolTip="Zoom In" Command="{Binding ZoomInCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="32"/>
-                    <Button Content="100%" ToolTip="Reset Zoom" Command="{Binding ResetZoomCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="50"/>
-                </StackPanel>
-                
-                <!-- Undo/Redo -->
-                <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Undo" ToolTip="Undo (Ctrl+Z)" Command="{Binding UndoCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="60"/>
-                    <Button Content="Redo" ToolTip="Redo (Ctrl+Y)" Command="{Binding RedoCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="60"/>
-                </StackPanel>
-                
-                <!-- Edit Menu -->
-                <StackPanel Grid.Column="7" Orientation="Horizontal">
-                    <Button Content="Clear" ToolTip="Clear Page" Command="{Binding ClearPageCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="60"/>
-                    <Button Content="Delete" ToolTip="Delete Selected" Command="{Binding DeleteSelectedCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="60"/>
-                    <Button Content="Select All" ToolTip="Select All (Ctrl+A)" Command="{Binding SelectAllCommand}" 
-                            Margin="2" Padding="8,4" Style="{StaticResource ToolButtonStyle}" Width="70"/>
-                </StackPanel>
-            </Grid>
+                <!-- New Notebook Button -->
+                <Button Content="+ New Notebook" 
+                        Style="{StaticResource SidebarButtonStyle}" 
+                        Margin="8,12,8,8" 
+                        Click="NewNotebook_Click"/>
+            </StackPanel>
         </Border>
         
-        <!-- Status Bar -->
-        <StatusBar DockPanel.Dock="Bottom" Background="#F5F5F5" BorderBrush="#DDDDDD" BorderThickness="1,0,0,0">
-            <StatusBarItem>
-                <TextBlock Text="{Binding PageName}" Margin="10,0"/>
-            </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock Text="GoodNotes Clone - v1.0" Margin="10,0"/>
-            </StatusBarItem>
-        </StatusBar>
-        
-        <!-- Main Content -->
-        <Grid DockPanel.Dock="Fill">
-            <!-- Sidebar - Notebooks and Pages -->
-            <Border Width="200" Background="#F0F0F0" BorderBrush="#DDDDDD" BorderThickness="0,0,1,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+        <!-- Toolbar + Canvas Area -->
+        <Grid>
+            <!-- Toolbar - Top -->
+            <Border DockPanel.Dock="Top" Height="50" Background="{StaticResource ToolbarBackgroundBrush}" 
+                    BorderBrush="#444444" BorderThickness="0,0,0,1">
+                <StackPanel Orientation="Horizontal" Height="48" VerticalAlignment="Center">
+                    <!-- File Group -->
+                    <StackPanel Orientation="Horizontal" Margin="8,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="📁" 
+                                ToolTip="File Menu" 
+                                Click="FileMenu_Click"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="💾" 
+                                ToolTip="Save (Ctrl+S)" 
+                                Command="{Binding SaveNotebookCommand}"/>
+                    </StackPanel>
                     
-                    <!-- Notebooks List -->
-                    <Expander Grid.Row="0" Header="Notebooks" IsExpanded="True" Margin="5">
-                        <ListBox ItemsSource="{Binding Notebooks}" SelectedItem="{Binding CurrentNotebook}" 
-                                 DisplayMemberPath="Name" Margin="5" BorderThickness="0"/>
-                    </Expander>
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
                     
-                    <!-- Pages List -->
-                    <Expander Grid.Row="1" Header="Pages" IsExpanded="True" Margin="5">
-                        <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding CurrentPage}" 
-                                 DisplayMemberPath="Name" Margin="5" BorderThickness="0" 
-                                 SelectionMode="Single" SelectionChanged="PageList_SelectionChanged"/>
-                    </Expander>
+                    <!-- Tool Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <ToggleButton x:Name="PenButton" 
+                                      Style="{StaticResource GoodNotesToggleButton}" 
+                                      Content="✏️" 
+                                      ToolTip="Pen (P)" 
+                                      IsChecked="True"
+                                      Checked="ToolButton_Checked" 
+                                      Tag="Pen"/>
+                        <ToggleButton x:Name="HighlighterButton" 
+                                      Style="{StaticResource GoodNotesToggleButton}" 
+                                      Content="🖍️" 
+                                      ToolTip="Highlighter (H)" 
+                                      Checked="ToolButton_Checked" 
+                                      Tag="Highlighter"/>
+                        <ToggleButton x:Name="EraserButton" 
+                                      Style="{StaticResource GoodNotesToggleButton}" 
+                                      Content="🧹" 
+                                      ToolTip="Eraser (E)" 
+                                      Checked="ToolButton_Checked" 
+                                      Tag="Eraser"/>
+                        <ToggleButton x:Name="LassoButton" 
+                                      Style="{StaticResource GoodNotesToggleButton}" 
+                                      Content="🎯" 
+                                      ToolTip="Lasso (L)" 
+                                      Checked="ToolButton_Checked" 
+                                      Tag="Lasso"/>
+                        <ToggleButton x:Name="HandButton" 
+                                      Style="{StaticResource GoodNotesToggleButton}" 
+                                      Content="👋" 
+                                      ToolTip="Hand" 
+                                      Checked="ToolButton_Checked" 
+                                      Tag="Hand"/>
+                    </StackPanel>
                     
-                    <!-- Add Notebook Button -->
-                    <Button Grid.Row="2" Content="+ New Notebook" Command="{Binding NewNotebookCommand}" 
-                            Margin="5" HorizontalAlignment="Stretch" Padding="5"/>
-                </Grid>
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
+                    
+                    <!-- Color Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#000000" 
+                                ToolTip="Black" 
+                                Click="ColorButton_Click" 
+                                Tag="#FF000000"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#E74C3C" 
+                                ToolTip="Red" 
+                                Click="ColorButton_Click" 
+                                Tag="#FFE74C3C"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#2ECC71" 
+                                ToolTip="Green" 
+                                Click="ColorButton_Click" 
+                                Tag="#FF2ECC71"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#3498DB" 
+                                ToolTip="Blue" 
+                                Click="ColorButton_Click" 
+                                Tag="#FF3498DB"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#F39C12" 
+                                ToolTip="Orange" 
+                                Click="ColorButton_Click" 
+                                Tag="#FFF39C12"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Background="#9B59B6" 
+                                ToolTip="Purple" 
+                                Click="ColorButton_Click" 
+                                Tag="#FF9B59B6"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="..." 
+                                ToolTip="More Colors" 
+                                Click="MoreColors_Click"/>
+                    </StackPanel>
+                    
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
+                    
+                    <!-- Width Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="◉" 
+                                ToolTip="Thin (1px)" 
+                                Click="WidthButton_Click" 
+                                Tag="1"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="▬" 
+                                ToolTip="Medium (2px)" 
+                                Click="WidthButton_Click" 
+                                Tag="2"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="▰" 
+                                ToolTip="Thick (4px)" 
+                                Click="WidthButton_Click" 
+                                Tag="4"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="█" 
+                                ToolTip="Extra Thick (8px)" 
+                                Click="WidthButton_Click" 
+                                Tag="8"/>
+                    </StackPanel>
+                    
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
+                    
+                    <!-- Page Navigation Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="◀️" 
+                                ToolTip="Previous Page (Ctrl+Left)" 
+                                Command="{Binding PreviousPageCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="▶️" 
+                                ToolTip="Next Page (Ctrl+Right)" 
+                                Command="{Binding NextPageCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="+" 
+                                ToolTip="Add Page" 
+                                Command="{Binding AddPageCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="−" 
+                                ToolTip="Remove Page" 
+                                Command="{Binding RemovePageCommand}"/>
+                    </StackPanel>
+                    
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
+                    
+                    <!-- Zoom Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="🔍−" 
+                                ToolTip="Zoom Out (Ctrl+−)" 
+                                Command="{Binding ZoomOutCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="🔍+" 
+                                ToolTip="Zoom In (Ctrl++)" 
+                                Command="{Binding ZoomInCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="🔍0" 
+                                ToolTip="Reset Zoom (Ctrl+0)" 
+                                Command="{Binding ResetZoomCommand}"/>
+                    </StackPanel>
+                    
+                    <!-- Separator -->
+                    <Border Width="1" Background="#444444" Margin="4,0"/>
+                    
+                    <!-- Undo/Redo Group -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,16,0">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="↩️" 
+                                ToolTip="Undo (Ctrl+Z)" 
+                                Command="{Binding UndoCommand}"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="↪️" 
+                                ToolTip="Redo (Ctrl+Y)" 
+                                Command="{Binding RedoCommand}"/>
+                    </StackPanel>
+                    
+                    <!-- Search and Settings -->
+                    <StackPanel Orientation="Horizontal" Margin="4,0,8,0" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="🔍" 
+                                ToolTip="Search (Ctrl+F)" 
+                                Click="Search_Click"/>
+                        <Button Style="{StaticResource GoodNotesToolButton}" 
+                                Content="⚙️" 
+                                ToolTip="Settings" 
+                                Click="Settings_Click"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
             
-            <!-- Canvas Area -->
-            <Grid Margin="0">
-                <Border BorderBrush="#CCCCCC" BorderThickness="1">
-                    <Canvas x:Name="DrawingCanvas" Background="White" 
-                            MouseLeftButtonDown="Canvas_MouseLeftButtonDown"
-                            MouseLeftButtonUp="Canvas_MouseLeftButtonUp"
-                            MouseMove="Canvas_MouseMove"
-                            MouseRightButtonDown="Canvas_MouseRightButtonDown">
-                        <Canvas.RenderTransform>
-                            <ScaleTransform x:Name="CanvasScaleTransform" ScaleX="1" ScaleY="1"/>
-                        </Canvas.RenderTransform>
-                        <Canvas.Clip>
-                            <RectangleGeometry x:Name="CanvasClip" Rect="0,0,800,1131"/>
-                        </Canvas.Clip>
-                    </Canvas>
+            <!-- Main Content Area -->
+            <Grid>
+                <!-- Notebook Grid View (when in Documents mode) -->
+                <ScrollViewer x:Name="NotebookGridScroll" 
+                              Visibility="Collapsed" 
+                              HorizontalScrollBarVisibility="Auto" 
+                              VerticalScrollBarVisibility="Auto">
+                    <WrapPanel x:Name="NotebookGrid" 
+                               Margin="20" 
+                               Orientation="Horizontal">
+                        <!-- Notebook items will be added here dynamically -->
+                    </WrapPanel>
+                </ScrollViewer>
+                
+                <!-- Canvas View (when in Notebook mode) -->
+                <Border x:Name="CanvasBorder" 
+                        Background="{StaticResource CanvasBackgroundBrush}" 
+                        Visibility="Visible">
+                    <Grid>
+                        <!-- Drawing Canvas -->
+                        <Canvas x:Name="DrawingCanvas" 
+                                Background="Transparent" 
+                                Margin="20" 
+                                ClipToBounds="True"
+                                MouseLeftButtonDown="Canvas_MouseLeftButtonDown"
+                                MouseMove="Canvas_MouseMove"
+                                MouseLeftButtonUp="Canvas_MouseLeftButtonUp"
+                                MouseRightButtonDown="Canvas_MouseRightButtonDown"
+                                MouseWheel="Canvas_MouseWheel">
+                            
+                            <!-- Canvas background with page template -->
+                            <Rectangle x:Name="PageBackground" 
+                                       Width="{Binding CurrentPage.Width}" 
+                                       Height="{Binding CurrentPage.Height}" 
+                                       Fill="{StaticResource CanvasBackgroundBrush}" 
+                                       Stroke="#E0E0E0" 
+                                       StrokeThickness="1"/>
+                            
+                            <!-- Page template lines (if lined/grid) -->
+                            <ItemsControl x:Name="PageTemplateLines" ItemsSource="{Binding CurrentPage.TemplateLines}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Line X1="{Binding X1}" Y1="{Binding Y1}" 
+                                              X2="{Binding X2}" Y2="{Binding Y2}" 
+                                              Stroke="#F0F0F0" StrokeThickness="1"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Canvas>
+                        
+                        <!-- ScrollViewer for canvas -->
+                    </Grid>
                 </Border>
             </Grid>
         </Grid>
     </DockPanel>
+    
+    <!-- Status Bar -->
+    <StatusBar DockPanel.Dock="Bottom" Background="{StaticResource ToolbarBackgroundBrush}" 
+               Foreground="{StaticResource TextLightBrush}" 
+               BorderBrush="#444444" BorderThickness="1,0,0,0">
+        <StatusBarItem>
+            <TextBlock Text="{Binding CurrentToolDisplay}" 
+                       Margin="12,4" 
+                       Foreground="{StaticResource TextLightBrush}"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="│" 
+                       Margin="4,4" 
+                       Foreground="#666666"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="{Binding CurrentNotebook.Name, StringFormat='Notebook: {0}'}" 
+                       Margin="4,4" 
+                       Foreground="{StaticResource TextLightBrush}"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="│" 
+                       Margin="4,4" 
+                       Foreground="#666666"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="{Binding CurrentPageIndex, StringFormat='Page: {0}/{1}'}" 
+                       Margin="4,4" 
+                       Foreground="{StaticResource TextLightBrush}"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="│" 
+                       Margin="4,4" 
+                       Foreground="#666666"/>
+        </StatusBarItem>
+        <StatusBarItem>
+            <TextBlock Text="{Binding ZoomLevel, StringFormat='Zoom: {0:P0}'}" 
+                       Margin="4,4" 
+                       Foreground="{StaticResource TextLightBrush}"/>
+        </StatusBarItem>
+    </StatusBar>
 </Window>
