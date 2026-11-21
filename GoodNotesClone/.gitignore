@@ -1,0 +1,75 @@
+# Visual Studio
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# NuGet
+packages/
+*.nupkg
+
+# User-specific files
+*.cache
+*.opensdf
+*.sdf
+
+# Project files
+*.csproj.user
+*.csproj.userosscache
+*.sln.user
+
+# Test results
+[Tt]est[Rr]esult*
+
+# IDE
+.vs/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+*.log
+*.txt
+
+# Local settings
+appsettings.Local.json
+
+# Environment
+.env
+.env.local
+
+# Node (if using Node.js for build)
+node_modules/
+npm-debug.log*
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/install-state.gz
+
+# Dotnet CLI
+.dotnet/
+
+# NuGet Cache
+%USERPROFILE%\.nuget\packages\*
+%USERPROFILE%\.nuget\v3\*
